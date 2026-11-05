@@ -1,0 +1,34 @@
+name: Post release notes to Discord
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send the release notes
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          NAME: ${{ github.event.release.name }}
+          TAG: ${{ github.event.release.tag_name }}
+          BODY: ${{ github.event.release.body }}
+          URL: ${{ github.event.release.html_url }}
+        run: |
+          TITLE="${NAME:-$TAG}"
+          # Discord embeds hold up to 4096 characters; longer notes get a link.
+          DESC="${BODY:0:3900}"
+          if [ ${#BODY} -gt 3900 ]; then
+            DESC="$DESC"$'\n\n…the full notes are on GitHub.'
+          fi
+          jq -n \
+            --arg title "Reminiscence $TITLE" \
+            --arg desc "$DESC" \
+            --arg url "$URL" \
+            '{
+              username: "Reminiscence Updates",
+              content: "A new update is out!",
+              embeds: [{ title: $title, url: $url, description: $desc, color: 7506394 }]
+            }' > payload.json
+          curl -sS -f -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
